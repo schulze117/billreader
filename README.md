@@ -15,6 +15,11 @@ cp .env.example .env   # fill in values
 python -m billreader.main
 ```
 
+## Spreadsheet
+
+The spreadsheet lives inside the Drive folder and must contain a `template` tab,
+which is duplicated for each subfolder. A `summary` tab, if present, is left untouched.
+
 ## Secrets (Actions → Secrets)
 
 - `GOOGLE_AI_API_KEY`

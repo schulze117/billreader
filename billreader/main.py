@@ -25,21 +25,26 @@ def process_folder(
 ) -> None:
     for folder in drive_api.list_subfolders(drive, folder_id):
         title = folder["name"]
+        if title.strip().lower() in sheets_api.RESERVED_TABS:
+            log.info("skip reserved name: %s", title)
+            continue
         sheets_api.ensure_tab(sheets, spreadsheet_id, title)
         seen = sheets_api.existing_filenames(sheets, spreadsheet_id, title)
         todo = [f for f in drive_api.list_pdfs(drive, folder["id"]) if _stem(f["name"]) not in seen]
-        log.info("%s: %d new", title, len(todo))
+        total = len(todo)
+        log.info("%s: %d new file(s)", title, total)
 
-        for pdf in todo:
+        for i, pdf in enumerate(todo, start=1):
             stem = _stem(pdf["name"])
             link = f"https://drive.google.com/file/d/{pdf['id']}/view"
+            # Progress only — never log extracted values.
+            log.info("%s: processing %d/%d (file %s)", title, i, total, stem)
             try:
                 pdf_bytes = drive_api.download_pdf_bytes(drive, pdf["id"])
                 bill = extract_bill(gemini, model, pdf_bytes)
                 sheets_api.append_row(sheets, spreadsheet_id, title, bill, stem, link)
-                log.info("  + %s", stem)
-            except Exception:
-                log.exception("  ! %s", stem)
+            except Exception as e:
+                log.warning("%s: file %s failed (%s)", title, stem, type(e).__name__)
 
 
 def run(config: Config) -> None:

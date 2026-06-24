@@ -6,23 +6,8 @@ from datetime import date, datetime
 
 from .extract import BillData
 
-HEADERS = [
-    "File_name",
-    "Description",
-    "Company",
-    "Bill_id",
-    "Bill_date",
-    "Nett_€",
-    "Tax_€",
-    "Tax_%",
-    "Total_€",
-]
-
-COL_BILL_DATE = 4
-COLS_CURRENCY = (5, 6, 8)
-
-CURRENCY_PATTERN = "[$€]#,##0.00"
-DATE_PATTERN = "DD.MM.YYYY"
+TEMPLATE_TAB = "template"
+RESERVED_TABS = {"template", "summary"}
 
 _EPOCH = date(1899, 12, 30)
 
@@ -31,79 +16,41 @@ def _quote(title: str) -> str:
     return "'" + title.replace("'", "''") + "'"
 
 
-def _sheet_id(sheets, spreadsheet_id: str, title: str) -> int | None:
+def _all_tabs(sheets, spreadsheet_id: str) -> dict[str, int]:
     meta = sheets.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    for s in meta.get("sheets", []):
-        if s["properties"]["title"] == title:
-            return s["properties"]["sheetId"]
-    return None
-
-
-def _column_format_request(sheet_id: int, col: int, fmt_type: str, pattern: str) -> dict:
     return {
-        "repeatCell": {
-            "range": {
-                "sheetId": sheet_id,
-                "startRowIndex": 1,
-                "startColumnIndex": col,
-                "endColumnIndex": col + 1,
-            },
-            "cell": {"userEnteredFormat": {"numberFormat": {"type": fmt_type, "pattern": pattern}}},
-            "fields": "userEnteredFormat.numberFormat",
-        }
+        s["properties"]["title"]: s["properties"]["sheetId"]
+        for s in meta.get("sheets", [])
     }
 
 
-def _initialise_tab(sheets, spreadsheet_id: str, sheet_id: int) -> None:
-    requests: list[dict] = [
-        {
-            "updateCells": {
-                "rows": [
-                    {"values": [{"userEnteredValue": {"stringValue": h}} for h in HEADERS]}
-                ],
-                "fields": "userEnteredValue",
-                "start": {"sheetId": sheet_id, "rowIndex": 0, "columnIndex": 0},
-            }
-        },
-        {
-            "repeatCell": {
-                "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1},
-                "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
-                "fields": "userEnteredFormat.textFormat.bold",
-            }
-        },
-        {
-            "updateSheetProperties": {
-                "properties": {"sheetId": sheet_id, "gridProperties": {"frozenRowCount": 1}},
-                "fields": "gridProperties.frozenRowCount",
-            }
-        },
-        _column_format_request(sheet_id, COL_BILL_DATE, "DATE", DATE_PATTERN),
-    ]
-    for col in COLS_CURRENCY:
-        requests.append(_column_format_request(sheet_id, col, "NUMBER", CURRENCY_PATTERN))
-
-    sheets.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id, body={"requests": requests}
-    ).execute()
-
-
 def ensure_tab(sheets, spreadsheet_id: str, title: str) -> int:
-    existing = _sheet_id(sheets, spreadsheet_id, title)
-    if existing is not None:
-        return existing
+    """Return the sheetId for `title`, duplicating the template tab if missing."""
+    tabs = _all_tabs(sheets, spreadsheet_id)
+    if title in tabs:
+        return tabs[title]
+    if TEMPLATE_TAB not in tabs:
+        raise RuntimeError(f"Template tab '{TEMPLATE_TAB}' not found in the spreadsheet.")
 
     reply = (
         sheets.spreadsheets()
         .batchUpdate(
             spreadsheetId=spreadsheet_id,
-            body={"requests": [{"addSheet": {"properties": {"title": title}}}]},
+            body={
+                "requests": [
+                    {
+                        "duplicateSheet": {
+                            "sourceSheetId": tabs[TEMPLATE_TAB],
+                            "insertSheetIndex": len(tabs),
+                            "newSheetName": title,
+                        }
+                    }
+                ]
+            },
         )
         .execute()
     )
-    sheet_id = reply["replies"][0]["addSheet"]["properties"]["sheetId"]
-    _initialise_tab(sheets, spreadsheet_id, sheet_id)
-    return sheet_id
+    return reply["replies"][0]["duplicateSheet"]["properties"]["sheetId"]
 
 
 def existing_filenames(sheets, spreadsheet_id: str, title: str) -> set[str]:
