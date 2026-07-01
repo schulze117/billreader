@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DEFAULT_IGNORE_FOLDERS = ("Fahrtenbücher", "pdf")
+
 
 @dataclass
 class Config:
@@ -18,6 +20,7 @@ class Config:
     gemini_model: str
     service_account_info: dict
     folder_id: str
+    ignore_folders: frozenset[str]
 
 
 def _load_service_account_info() -> dict:
@@ -28,6 +31,12 @@ def _load_service_account_info() -> dict:
     if path and Path(path).exists():
         return json.loads(Path(path).read_text(encoding="utf-8"))
     raise RuntimeError("Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_FILE.")
+
+
+def _load_ignore_folders() -> frozenset[str]:
+    raw = os.environ.get("IGNORE_FOLDERS")
+    names = raw.split(",") if (raw and raw.strip()) else DEFAULT_IGNORE_FOLDERS
+    return frozenset(n.strip().lower() for n in names if n.strip())
 
 
 def load_config() -> Config:
@@ -50,4 +59,5 @@ def load_config() -> Config:
         gemini_model=os.environ.get("GEMINI_MODEL", "gemini-3.5-flash").strip(),
         service_account_info=_load_service_account_info(),
         folder_id=folder_id,
+        ignore_folders=_load_ignore_folders(),
     )

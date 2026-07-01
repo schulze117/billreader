@@ -21,12 +21,18 @@ def _stem(name: str) -> str:
 
 
 def process_folder(
-    drive, sheets, gemini: genai.Client, model: str, spreadsheet_id: str, folder_id: str
+    drive,
+    sheets,
+    gemini: genai.Client,
+    model: str,
+    spreadsheet_id: str,
+    folder_id: str,
+    skip: set[str],
 ) -> None:
     for folder in drive_api.list_subfolders(drive, folder_id):
         title = folder["name"]
-        if title.strip().lower() in sheets_api.RESERVED_TABS:
-            log.info("skip reserved name: %s", title)
+        if title.strip().lower() in skip:
+            log.info("skip folder: %s", title)
             continue
         sheets_api.ensure_tab(sheets, spreadsheet_id, title)
         seen = sheets_api.existing_filenames(sheets, spreadsheet_id, title)
@@ -57,8 +63,9 @@ def run(config: Config) -> None:
     if len(spreadsheets) > 1:
         log.warning("Multiple spreadsheets found; using the first.")
 
+    skip = set(sheets_api.RESERVED_TABS) | set(config.ignore_folders)
     process_folder(
-        drive, sheets, gemini, config.gemini_model, spreadsheets[0]["id"], config.folder_id
+        drive, sheets, gemini, config.gemini_model, spreadsheets[0]["id"], config.folder_id, skip
     )
 
 

@@ -24,6 +24,9 @@ Rules:
   values, and do NOT check whether nett + tax equals total. German bills often mix
   two tax rates (e.g. 7% on food and 19% on other goods), so the arithmetic may not
   add up against a single rate — that is expected and fine.
+- If the document shows no VAT/tax at all (e.g. a Kleinunternehmer invoice without
+  Umsatzsteuer), then there is no tax: set tax_percent to "0", tax to 0, and nett
+  equal to total.
 - If a value is not present in the document, leave it empty ("" for text fields,
   null for number fields). Do not guess.
 - Always return all fields, even when some are empty/null.
